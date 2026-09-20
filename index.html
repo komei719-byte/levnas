@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レバナス錬金術 モンテカルロシミュレーター</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+        }
+        .glow-rose {
+            box-shadow: 0 0 20px rgba(244, 63, 94, 0.15);
+        }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-gradient-to-tr from-amber-500 to-rose-500 rounded-lg text-white">
+                    <i data-lucide="zap" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-400 via-rose-400 to-purple-400">
+                        レバナス錬金術 モンテカルロシミュレーター
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">カードローン一括投資×毎月取崩返済リスク評価</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 text-xs bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-1.5 rounded-full">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400 shrink-0"></i>
+                <span class="font-medium">超高リスク手法・要シミュレーション</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex-grow">
+        
+        <!-- Risk Warning Banner -->
+        <div class="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200/90 text-sm flex items-start space-x-3">
+            <i data-lucide="info" class="w-5 h-5 text-amber-400 shrink-0 mt-0.5"></i>
+            <div>
+                <span class="font-semibold text-amber-300">【レバナス錬金術（借入金運用）の構造リスク】</span>
+                高金利（カードローン等）で借り入れた資金をレバナス（2倍・3倍レバレッジ投資信託/ETF）に投じる手法は、相場下落時に爆発的な損失を被り、返済不可（破産）となる極めて高いリスクを伴います。本ツールは理論上のリスク・リターン確率分布を対数正規分布モデルで視覚化します。
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Controls Sidebar -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-panel p-5 rounded-2xl space-y-5">
+                    <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                        <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <i data-lucide="sliders" class="w-5 h-5 text-indigo-400"></i>
+                            パラメータ設定
+                        </h2>
+                        <button id="btnReset" class="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 初期化
+                        </button>
+                    </div>
+
+                    <!-- Input Form -->
+                    <div class="space-y-4 text-sm">
+                        
+                        <!-- 1. Borrow Amount -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="numBorrow" class="text-slate-300 font-medium">借入額 (元本)</label>
+                                <div class="flex items-center space-x-1">
+                                    <input type="number" id="numBorrow" min="100000" max="10000000" step="100000" value="3000000"
+                                           class="w-28 bg-slate-800 border border-slate-700 text-right text-indigo-400 font-semibold rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-indigo-500 outline-none">
+                                    <span class="text-xs text-slate-400">円</span>
+                                </div>
+                            </div>
+                            <input type="range" id="inputBorrow" min="100000" max="10000000" step="100000" value="3000000"
+                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                            <div class="text-[11px] text-slate-400 text-right" id="txtBorrowFormatted">300 万円</div>
+                        </div>
+
+                        <!-- 2. Repayment Amount (1,000 yen step) -->
+                        <div class="space-y-1.5 p-2.5 bg-slate-800/50 rounded-xl border border-indigo-500/20">
+                            <div class="flex justify-between items-center">
+                                <label for="numRepayment" class="text-slate-200 font-medium flex items-center gap-1">
+                                    <span>毎月の返済額</span>
+                                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30">1,000円刻み</span>
+                                </label>
+                                <div class="flex items-center space-x-1">
+                                    <input type="number" id="numRepayment" min="1000" max="200000" step="1000" value="30000"
+                                           class="w-28 bg-slate-900 border border-indigo-500/40 text-right text-emerald-400 font-bold rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    <span class="text-xs text-slate-400">円</span>
+                                </div>
+                            </div>
+                            <!-- STEP IS STRICTLY 1000 HERE -->
+                            <input type="range" id="inputRepayment" min="1000" max="200000" step="1000" value="30000"
+                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                            <div class="text-[11px] text-emerald-400 font-medium text-right" id="txtRepaymentFormatted">30,000 円</div>
+                        </div>
+
+                        <!-- 3. Borrow Interest Rate -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="numInterest" class="text-slate-300 font-medium">借入金利 (年利)</label>
+                                <div class="flex items-center space-x-1">
+                                    <input type="number" id="numInterest" min="0.0" max="18.0" step="0.1" value="15.0"
+                                           class="w-20 bg-slate-800 border border-slate-700 text-right text-rose-400 font-semibold rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-rose-500 outline-none">
+                                    <span class="text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                            <input type="range" id="inputInterest" min="0.0" max="18.0" step="0.1" value="15.0"
+                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-rose-500">
+                        </div>
+
+                        <hr class="border-slate-700/60 my-2">
+
+                        <!-- 4. Expected Return -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="numReturn" class="text-slate-300 font-medium">レバナス期待リターン (年利)</label>
+                                <div class="flex items-center space-x-1">
+                                    <input type="number" id="numReturn" min="-10.0" max="50.0" step="0.1" value="20.0"
+                                           class="w-20 bg-slate-800 border border-slate-700 text-right text-cyan-400 font-semibold rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-cyan-500 outline-none">
+                                    <span class="text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                            <input type="range" id="inputReturn" min="-10.0" max="50.0" step="0.1" value="20.0"
+                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                        </div>
+
+                        <!-- 5. Volatility -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="numRisk" class="text-slate-300 font-medium">レバナスリスク (ボラティリティ)</label>
+                                <div class="flex items-center space-x-1">
+                                    <input type="number" id="numRisk" min="10.0" max="80.0" step="0.1" value="40.0"
+                                           class="w-20 bg-slate-800 border border-slate-700 text-right text-purple-400 font-semibold rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-purple-500 outline-none">
+                                    <span class="text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                            <input type="range" id="inputRisk" min="10.0" max="80.0" step="0.1" value="40.0"
+                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                        </div>
+
+                        <hr class="border-slate-700/60 my-2">
+
+                        <!-- 6. Simulation Horizon -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="numYears" class="text-slate-300 font-medium">シミュレーション期間</label>
+                                <div class="flex items-center space-x-1">
+                                    <input type="number" id="numYears" min="1" max="30" step="1" value="10"
+                                           class="w-20 bg-slate-800 border border-slate-700 text-right text-amber-400 font-semibold rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-amber-500 outline-none">
+                                    <span class="text-xs text-slate-400">年</span>
+                                </div>
+                            </div>
+                            <input type="range" id="inputYears" min="1" max="30" step="1" value="10"
+                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                        </div>
+
+                        <!-- 7. Number of Simulations -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="selectSims" class="text-slate-300 font-medium">試行回数 (モンテカルロ)</label>
+                            </div>
+                            <select id="selectSims" class="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="500">500 回（高速）</option>
+                                <option value="1000" selected>1,000 回（標準）</option>
+                                <option value="2000">2,000 回（高精度）</option>
+                                <option value="3000">3,000 回（最高精度）</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Run Button -->
+                    <button id="btnRun" class="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 hover:from-indigo-600 hover:via-purple-600 hover:to-rose-600 font-bold rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center space-x-2 text-white">
+                        <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+                        <span>シミュレーションを実行</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Display Area -->
+            <div class="lg:col-span-8 space-y-6">
+                
+                <!-- Metrics Summary Cards Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    
+                    <!-- 1. Median Final Asset -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>最終資産 (中央値)</span>
+                            <i data-lucide="line-chart" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resMedianAsset" class="text-xl sm:text-2xl font-bold text-slate-100">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">確率 50% ケース</div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Top 10% Case -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between glow-emerald">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>上位 10% ケース</span>
+                            <i data-lucide="trending-up" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resTop10Asset" class="text-xl sm:text-2xl font-bold text-emerald-400">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">上振れ成功例</div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Bottom 10% Case -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>下位 10% ケース</span>
+                            <i data-lucide="trending-down" class="w-3.5 h-3.5 text-rose-400"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resBottom10Asset" class="text-xl sm:text-2xl font-bold text-rose-400">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">下振れケース</div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Full Repayment Rate -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>完済成功率</span>
+                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-cyan-400"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resRepaySuccessRate" class="text-xl sm:text-2xl font-bold text-cyan-300">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">借入残高が0到達</div>
+                        </div>
+                    </div>
+
+                    <!-- 5. Bankruptcy / Principal Loss -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between glow-rose">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>破産・資産枯渇率</span>
+                            <i data-lucide="skull" class="w-3.5 h-3.5 text-rose-500"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resBankruptRate" class="text-xl sm:text-2xl font-bold text-rose-500">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">返済途中で資産が0</div>
+                        </div>
+                    </div>
+
+                    <!-- 6. Median Max Drawdown -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>最大DD (中央値)</span>
+                            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resMedianMaxDD" class="text-xl sm:text-2xl font-bold text-amber-400">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">高値からの落差</div>
+                        </div>
+                    </div>
+
+                    <!-- 7. Max DD >= 50% Prob -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>DD 50%以上確率</span>
+                            <i data-lucide="alert-octagon" class="w-3.5 h-3.5 text-orange-400"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resDD50Prob" class="text-xl sm:text-2xl font-bold text-slate-100">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">半値以下の半落</div>
+                        </div>
+                    </div>
+
+                    <!-- 8. Max DD >= 70% Prob -->
+                    <div class="glass-panel p-3.5 rounded-xl flex flex-col justify-between">
+                        <div class="text-xs text-slate-400 flex items-center justify-between">
+                            <span>DD 70%以上確率</span>
+                            <i data-lucide="flame" class="w-3.5 h-3.5 text-red-500"></i>
+                        </div>
+                        <div class="mt-2">
+                            <div id="resDD70Prob" class="text-xl sm:text-2xl font-bold text-slate-100">---</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">7割超の壊滅的下落</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Chart Box -->
+                <div class="glass-panel p-5 rounded-2xl space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/60 pb-3">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="activity" class="w-5 h-5 text-indigo-400"></i>
+                            <h3 class="font-bold text-slate-100">資産推移 モンテカルロ軌跡 (パーセンタイル & サンプル)</h3>
+                        </div>
+                        <div class="flex items-center space-x-3 text-xs">
+                            <label class="flex items-center space-x-1 text-slate-300 cursor-pointer">
+                                <input type="checkbox" id="chkShowSamples" checked class="rounded border-slate-700 text-indigo-500 focus:ring-indigo-500">
+                                <span>サンプル軌跡表示</span>
+                            </label>
+                            <label class="flex items-center space-x-1 text-slate-300 cursor-pointer">
+                                <input type="checkbox" id="chkLogScale" class="rounded border-slate-700 text-indigo-500 focus:ring-indigo-500">
+                                <span>対数軸</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Chart Canvas Container -->
+                    <div class="relative h-[380px] w-full">
+                        <canvas id="simChart"></canvas>
+                        <!-- Loading Overlay -->
+                        <div id="chartLoading" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center space-y-3 rounded-xl transition-opacity duration-300">
+                            <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-sm font-medium text-slate-300" id="loadingText">計算中...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Analysis Box -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="glass-panel p-4 rounded-xl space-y-3 text-sm">
+                        <h4 class="font-semibold text-slate-200 flex items-center gap-2">
+                            <i data-lucide="credit-card" class="w-4 h-4 text-purple-400"></i>
+                            ローン構造分析
+                        </h4>
+                        <div class="space-y-2 text-xs text-slate-300">
+                            <div class="flex justify-between py-1 border-b border-slate-700/40">
+                                <span class="text-slate-400">初月利息負担:</span>
+                                <span class="font-mono text-rose-400 font-semibold" id="infoFirstMonthInterest">--- 円</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-slate-700/40">
+                                <span class="text-slate-400">返済期間 (単独試算):</span>
+                                <span class="font-mono text-slate-200" id="infoPayoffPeriod">---</span>
+                            </div>
+                            <div class="flex justify-between py-1">
+                                <span class="text-slate-400">リスク判定:</span>
+                                <span class="font-semibold" id="infoPayoffDifficulty">---</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-4 rounded-xl space-y-2 text-xs text-slate-300">
+                        <h4 class="font-semibold text-slate-200 flex items-center gap-2 text-sm">
+                            <i data-lucide="lightbulb" class="w-4 h-4 text-amber-400"></i>
+                            シミュレーション結果診断
+                        </h4>
+                        <p id="infoInsightText" class="leading-relaxed text-slate-400">
+                            パラメータを入力後、「シミュレーションを実行」ボタンを押すと結果が表示されます。
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-slate-900 py-4 mt-8 text-center text-xs text-slate-500">
+        <p>※本ツールは統計的モデル(Log-Normal)に基づく試算であり、実際の将来運用成果や借入返済を保証するものではありません。</p>
+    </footer>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // ---------------------------------------------------------------------
+        // Element Bindings & State Control
+        // ---------------------------------------------------------------------
+        const elements = {
+            // Borrow Amount
+            borrowRange: document.getElementById('inputBorrow'),
+            borrowNum: document.getElementById('numBorrow'),
+            borrowTxt: document.getElementById('txtBorrowFormatted'),
+
+            // Repayment Amount
+            repayRange: document.getElementById('inputRepayment'),
+            repayNum: document.getElementById('numRepayment'),
+            repayTxt: document.getElementById('txtRepaymentFormatted'),
+
+            // Interest Rate
+            interestRange: document.getElementById('inputInterest'),
+            interestNum: document.getElementById('numInterest'),
+
+            // Expected Return
+            returnRange: document.getElementById('inputReturn'),
+            returnNum: document.getElementById('numReturn'),
+
+            // Volatility / Risk
+            riskRange: document.getElementById('inputRisk'),
+            riskNum: document.getElementById('numRisk'),
+
+            // Simulation Horizon (Years)
+            yearsRange: document.getElementById('inputYears'),
+            yearsNum: document.getElementById('numYears'),
+
+            // Simulation Count
+            simsSelect: document.getElementById('selectSims')
+        };
+
+        const display = {
+            medianAsset: document.getElementById('resMedianAsset'),
+            top10Asset: document.getElementById('resTop10Asset'),
+            bottom10Asset: document.getElementById('resBottom10Asset'),
+            repaySuccessRate: document.getElementById('resRepaySuccessRate'),
+            bankruptRate: document.getElementById('resBankruptRate'),
+            medianMaxDD: document.getElementById('resMedianMaxDD'),
+            dd50Prob: document.getElementById('resDD50Prob'),
+            dd70Prob: document.getElementById('resDD70Prob'),
+            firstInterest: document.getElementById('infoFirstMonthInterest'),
+            payoffPeriod: document.getElementById('infoPayoffPeriod'),
+            difficulty: document.getElementById('infoPayoffDifficulty'),
+            insight: document.getElementById('infoInsightText')
+        };
+
+        const chkShowSamples = document.getElementById('chkShowSamples');
+        const chkLogScale = document.getElementById('chkLogScale');
+        const btnRun = document.getElementById('btnRun');
+        const btnReset = document.getElementById('btnReset');
+        const chartLoading = document.getElementById('chartLoading');
+        const loadingText = document.getElementById('loadingText');
+
+        let simChart = null;
+        let lastSimulationResults = null;
+
+        // ---------------------------------------------------------------------
+        // Two-way Binding Helper for Sliders and Number Inputs
+        // ---------------------------------------------------------------------
+        function setupTwoWayBinding(rangeElem, numElem, callback) {
+            rangeElem.addEventListener('input', () => {
+                numElem.value = rangeElem.value;
+                if (callback) callback();
+            });
+            numElem.addEventListener('input', () => {
+                let val = parseFloat(numElem.value);
+                if (isNaN(val)) return;
+                rangeElem.value = val;
+                if (callback) callback();
+            });
+            numElem.addEventListener('change', () => {
+                let val = parseFloat(numElem.value);
+                const min = parseFloat(rangeElem.min);
+                const max = parseFloat(rangeElem.max);
+                if (isNaN(val) || val < min) val = min;
+                if (val > max) val = max;
+                numElem.value = val;
+                rangeElem.value = val;
+                if (callback) callback();
+            });
+        }
+
+        // Formatters
+        function formatYen(num) {
+            if (num <= 0) return '0 円';
+            if (num >= 100000000) {
+                return (num / 100000000).toFixed(2) + ' 億円';
+            }
+            if (num >= 10000) {
+                return Math.round(num / 10000).toLocaleString() + ' 万円';
+            }
+            return Math.round(num).toLocaleString() + ' 円';
+        }
+
+        function formatPercent(val) {
+            return val.toFixed(1) + ' %';
+        }
+
+        function syncLabels() {
+            // Borrow text formatted
+            const borrowVal = parseFloat(elements.borrowRange.value);
+            elements.borrowTxt.innerText = `${(borrowVal / 10000).toLocaleString()} 万円`;
+
+            // Repayment text formatted
+            const repayVal = parseFloat(elements.repayRange.value);
+            elements.repayTxt.innerText = `${Math.round(repayVal).toLocaleString()} 円`;
+
+            // Calculate debt structure info
+            const loan = borrowVal;
+            const rate = parseFloat(elements.interestRange.value) / 100;
+            const pay = repayVal;
+            const firstMonthInterest = loan * (rate / 12);
+
+            display.firstInterest.innerText = `${Math.round(firstMonthInterest).toLocaleString()} 円/月`;
+
+            if (pay <= firstMonthInterest) {
+                display.payoffPeriod.innerText = '永続的に完済不能（利息未払い）';
+                display.payoffPeriod.className = 'font-mono text-rose-400 font-semibold';
+                display.difficulty.innerText = '破綻確定';
+                display.difficulty.className = 'font-semibold text-rose-500';
+            } else {
+                const rMonth = rate / 12;
+                if (rMonth <= 0) {
+                    const months = loan / pay;
+                    display.payoffPeriod.innerText = `約 ${Math.ceil(months / 12)}年 ${Math.ceil(months % 12)}ヶ月`;
+                    display.payoffPeriod.className = 'font-mono text-slate-200';
+                } else {
+                    const months = -Math.log(1 - (loan * rMonth) / pay) / Math.log(1 + rMonth);
+                    if (isNaN(months) || months <= 0) {
+                        display.payoffPeriod.innerText = '計算不能';
+                        display.difficulty.innerText = '超高リスク';
+                        display.difficulty.className = 'font-semibold text-rose-400';
+                    } else {
+                        const yrs = Math.floor(months / 12);
+                        const m = Math.round(months % 12);
+                        display.payoffPeriod.innerText = `約 ${yrs}年 ${m}ヶ月`;
+                        display.payoffPeriod.className = 'font-mono text-slate-200';
+
+                        if (rate >= 0.12) {
+                            display.difficulty.innerText = '極めて危険（利息負担極大）';
+                            display.difficulty.className = 'font-semibold text-rose-400';
+                        } else if (rate >= 0.05) {
+                            display.difficulty.innerText = '高リスク（要注意）';
+                            display.difficulty.className = 'font-semibold text-amber-400';
+                        } else {
+                            display.difficulty.innerText = '中程度';
+                            display.difficulty.className = 'font-semibold text-emerald-400';
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bind all controls
+        setupTwoWayBinding(elements.borrowRange, elements.borrowNum, syncLabels);
+        setupTwoWayBinding(elements.repayRange, elements.repayNum, syncLabels);
+        setupTwoWayBinding(elements.interestRange, elements.interestNum, syncLabels);
+        setupTwoWayBinding(elements.returnRange, elements.returnNum, syncLabels);
+        setupTwoWayBinding(elements.riskRange, elements.riskNum, syncLabels);
+        setupTwoWayBinding(elements.yearsRange, elements.yearsNum, syncLabels);
+
+        btnReset.addEventListener('click', () => {
+            elements.borrowRange.value = 3000000; elements.borrowNum.value = 3000000;
+            elements.repayRange.value = 30000; elements.repayNum.value = 30000;
+            elements.interestRange.value = 15.0; elements.interestNum.value = 15.0;
+            elements.returnRange.value = 20.0; elements.returnNum.value = 20.0;
+            elements.riskRange.value = 40.0; elements.riskNum.value = 40.0;
+            elements.yearsRange.value = 10; elements.yearsNum.value = 10;
+            elements.simsSelect.value = 1000;
+            syncLabels();
+            runSimulation();
+        });
+
+        // Box-Muller Transformation for Standard Normal Distribution
+        function randomNormal() {
+            let u1 = Math.random();
+            let u2 = Math.random();
+            while (u1 === 0) u1 = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        }
+
+        function quantile(arr, q) {
+            const sorted = [...arr].sort((a, b) => a - b);
+            const pos = (sorted.length - 1) * q;
+            const base = Math.floor(pos);
+            const rest = pos - base;
+            if (sorted[base + 1] !== undefined) {
+                return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+            }
+            return sorted[base];
+        }
+
+        // ---------------------------------------------------------------------
+        // Monte Carlo Simulation Engine
+        // ---------------------------------------------------------------------
+        function runSimulation() {
+            chartLoading.style.opacity = '1';
+            chartLoading.style.pointerEvents = 'auto';
+            loadingText.innerText = 'シミュレーション計算中...';
+
+            setTimeout(() => {
+                const loanAmount = parseFloat(elements.borrowRange.value);
+                const annualInterest = parseFloat(elements.interestRange.value) / 100;
+                const monthlyPayment = parseFloat(elements.repayRange.value);
+                const mu = parseFloat(elements.returnRange.value) / 100;
+                const sigma = parseFloat(elements.riskRange.value) / 100;
+                const years = parseInt(elements.yearsRange.value);
+                const totalMonths = years * 12;
+                const N = parseInt(elements.simsSelect.value);
+
+                const dt = 1 / 12;
+                const monthlyInterestRate = annualInterest / 12;
+                const drift = (mu - 0.5 * sigma * sigma) * dt;
+                const volSqrtDt = sigma * Math.sqrt(dt);
+
+                const assetPaths = new Array(N);
+                const maxDrawdowns = new Float64Array(N);
+                const isBankrupt = new Uint8Array(N);
+                const isRepaid = new Uint8Array(N);
+
+                const sampleCount = Math.min(15, N);
+                const sampleIndices = [];
+                for (let i = 0; i < sampleCount; i++) {
+                    sampleIndices.push(Math.floor(i * (N / sampleCount)));
+                }
+
+                for (let i = 0; i < N; i++) {
+                    const assetHistory = new Float64Array(totalMonths + 1);
+                    assetHistory[0] = loanAmount;
+
+                    let currentAsset = loanAmount;
+                    let currentLoan = loanAmount;
+                    let maxAsset = currentAsset;
+                    let maxDD = 0;
+                    let bankrupt = false;
+                    let repaid = false;
+
+                    for (let m = 1; m <= totalMonths; m++) {
+                        if (!bankrupt) {
+                            // 1. Asset Return (Log-Normal Process)
+                            const z = randomNormal();
+                            const returnRate = Math.exp(drift + volSqrtDt * z);
+                            currentAsset = currentAsset * returnRate;
+
+                            // Peak and Max DD calculation
+                            if (currentAsset > maxAsset) {
+                                maxAsset = currentAsset;
+                            }
+                            const currentDD = (maxAsset - currentAsset) / maxAsset;
+                            if (currentDD > maxDD) {
+                                maxDD = currentDD;
+                            }
+
+                            // 2. Loan Repayment and Interest Deduction
+                            if (currentLoan > 0) {
+                                const interest = currentLoan * monthlyInterestRate;
+                                currentLoan = currentLoan + interest;
+
+                                // Amount to pay this month
+                                const payThisMonth = Math.min(monthlyPayment, currentLoan);
+
+                                // Deduct from debt
+                                currentLoan -= payThisMonth;
+                                if (currentLoan <= 0) {
+                                    currentLoan = 0;
+                                    repaid = true;
+                                }
+
+                                // Deduct from Asset
+                                currentAsset -= payThisMonth;
+                            }
+
+                            // Check Asset Bankrupcy / Depletion
+                            if (currentAsset <= 0) {
+                                currentAsset = 0;
+                                bankrupt = true;
+                            }
+                        } else {
+                            currentAsset = 0;
+                        }
+
+                        assetHistory[m] = currentAsset;
+                    }
+
+                    assetPaths[i] = assetHistory;
+                    maxDrawdowns[i] = maxDD;
+                    if (bankrupt) isBankrupt[i] = 1;
+                    if (repaid && !bankrupt) isRepaid[i] = 1;
+                }
+
+                // Calculate Percentiles per Month
+                const pathMedian = new Float64Array(totalMonths + 1);
+                const pathTop10 = new Float64Array(totalMonths + 1);
+                const pathBottom10 = new Float64Array(totalMonths + 1);
+
+                for (let m = 0; m <= totalMonths; m++) {
+                    const monthAssets = new Float64Array(N);
+                    for (let i = 0; i < N; i++) {
+                        monthAssets[i] = assetPaths[i][m];
+                    }
+                    pathBottom10[m] = quantile(monthAssets, 0.10);
+                    pathMedian[m] = quantile(monthAssets, 0.50);
+                    pathTop10[m] = quantile(monthAssets, 0.90);
+                }
+
+                // Final Asset Metrics
+                const finalAssets = new Float64Array(N);
+                for (let i = 0; i < N; i++) {
+                    finalAssets[i] = assetPaths[i][totalMonths];
+                }
+
+                const medianFinal = quantile(finalAssets, 0.50);
+                const top10Final = quantile(finalAssets, 0.90);
+                const bottom10Final = quantile(finalAssets, 0.10);
+
+                let bankruptCount = 0;
+                let repaidCount = 0;
+                for (let i = 0; i < N; i++) {
+                    if (isBankrupt[i]) bankruptCount++;
+                    if (isRepaid[i]) repaidCount++;
+                }
+
+                const bankruptRate = (bankruptCount / N) * 100;
+                const repaidRate = (repaidCount / N) * 100;
+
+                const medianMaxDDVal = quantile(maxDrawdowns, 0.50) * 100;
+                let dd50Count = 0;
+                let dd70Count = 0;
+                for (let i = 0; i < N; i++) {
+                    if (maxDrawdowns[i] >= 0.50) dd50Count++;
+                    if (maxDrawdowns[i] >= 0.70) dd70Count++;
+                }
+                const dd50Prob = (dd50Count / N) * 100;
+                const dd70Prob = (dd70Count / N) * 100;
+
+                // Render Summary Metrics
+                display.medianAsset.innerText = formatYen(medianFinal);
+                display.top10Asset.innerText = formatYen(top10Final);
+                display.bottom10Asset.innerText = formatYen(bottom10Final);
+                display.repaySuccessRate.innerText = formatPercent(repaidRate);
+                display.bankruptRate.innerText = formatPercent(bankruptRate);
+                display.medianMaxDD.innerText = formatPercent(medianMaxDDVal);
+                display.dd50Prob.innerText = formatPercent(dd50Prob);
+                display.dd70Prob.innerText = formatPercent(dd70Prob);
+
+                // Custom insight message
+                if (bankruptRate > 30) {
+                    display.insight.innerHTML = `<span class="text-rose-400 font-bold">【高リスク警報】破産・枯渇率が${formatPercent(bankruptRate)}と危険水準です。</span> 高い借入金利(${elements.interestRange.value}%)とボラティリティ(${elements.riskRange.value}%)により、序盤に下落相場が来ると返済原資が急速に底をつきます。`;
+                } else if (repaidRate > 70) {
+                    display.insight.innerHTML = `<span class="text-emerald-400 font-bold">【完済傾向良好】完済成功率は${formatPercent(repaidRate)}です。</span> 高い運用リターン(${elements.returnRange.value}%)が借入コストを上回るケースが多いですが、最大ドローダウン(${formatPercent(medianMaxDDVal)})への耐性が必要です。`;
+                } else {
+                    display.insight.innerHTML = `完済率は${formatPercent(repaidRate)}、破産率は${formatPercent(bankruptRate)}です。期待リターンと借入金利の差分（スプレッド）が勝敗を大きく左右します。`;
+                }
+
+                lastSimulationResults = {
+                    totalMonths,
+                    pathTop10,
+                    pathMedian,
+                    pathBottom10,
+                    assetPaths,
+                    sampleIndices
+                };
+
+                updateChart();
+
+                chartLoading.style.opacity = '0';
+                chartLoading.style.pointerEvents = 'none';
+            }, 50);
+        }
+
+        // ---------------------------------------------------------------------
+        // Chart Rendering
+        // ---------------------------------------------------------------------
+        function updateChart() {
+            if (!lastSimulationResults) return;
+
+            const { totalMonths, pathTop10, pathMedian, pathBottom10, assetPaths, sampleIndices } = lastSimulationResults;
+
+            const xLabels = [];
+            for (let m = 0; m <= totalMonths; m++) {
+                if (m % 12 === 0) {
+                    xLabels.push(`${m / 12}年`);
+                } else {
+                    xLabels.push(`${m}ヶ月`);
+                }
+            }
+
+            const datasets = [
+                {
+                    label: '上位 10% ケース',
+                    data: Array.from(pathTop10),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    tension: 0.1
+                },
+                {
+                    label: '中央値 (50%)',
+                    data: Array.from(pathMedian),
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    tension: 0.1
+                },
+                {
+                    label: '下位 10% ケース',
+                    data: Array.from(pathBottom10),
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    tension: 0.1
+                }
+            ];
+
+            if (chkShowSamples.checked) {
+                sampleIndices.forEach((idx, i) => {
+                    datasets.push({
+                        label: i === 0 ? 'サンプル軌跡' : '',
+                        data: Array.from(assetPaths[idx]),
+                        borderColor: 'rgba(148, 163, 184, 0.18)',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        showInLegend: i === 0
+                    });
+                });
+            }
+
+            if (simChart) {
+                simChart.destroy();
+            }
+
+            const ctx = document.getElementById('simChart').getContext('2d');
+            simChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: xLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#94a3b8',
+                                filter: function(item) {
+                                    return item.text !== '';
+                                },
+                                font: { family: 'Inter', size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#f8fafc',
+                            bodyColor: '#cbd5e1',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    if (!context.dataset.label) return null;
+                                    let val = context.parsed.y;
+                                    return `${context.dataset.label}: ${formatYen(val)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#94a3b8',
+                                maxTicksLimit: 12
+                            }
+                        },
+                        y: {
+                            type: chkLogScale.checked ? 'logarithmic' : 'linear',
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#94a3b8',
+                                callback: function(value) {
+                                    if (value <= 0) return '0円';
+                                    if (value >= 100000000) return (value/100000000) + '億円';
+                                    if (value >= 10000) return (value/10000) + '万円';
+                                    return value + '円';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Event Listeners
+        btnRun.addEventListener('click', runSimulation);
+        chkShowSamples.addEventListener('change', updateChart);
+        chkLogScale.addEventListener('change', updateChart);
+
+        window.onload = function() {
+            syncLabels();
+            runSimulation();
+        };
+    </script>
+</body>
+</html>
